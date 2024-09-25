@@ -13,14 +13,16 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
+type UserInfo struct {
+	OAuthId   string
+	Name      string
+	AvatarUrl string
+}
+
 // Service represents a service that interacts with a database.
 type Service interface {
-	// Health returns a map of health status information.
-	// The keys and values in the map are service-specific.
+	GetOrCreateUser(uinfo UserInfo) map[string]string
 	Health() map[string]string
-
-	// Close terminates the database connection.
-	// It returns an error if the connection cannot be closed.
 	Close() error
 }
 
@@ -54,8 +56,29 @@ func New() Service {
 	return dbInstance
 }
 
-// Health checks the health of the database connection by pinging the database.
-// It returns a map with keys indicating various health statistics.
+func (s *service) GetOrCreateUser(uinfo UserInfo) map[string]string {
+	var id, name, avatarUrl string
+
+	err := s.db.QueryRow(
+		"select * from public.get_or_create_user($1, $2, $3)",
+		uinfo.OAuthId,
+		uinfo.Name,
+		uinfo.AvatarUrl,
+	).Scan(&id, &name, &avatarUrl)
+
+	if err != nil {
+		log.Fatalf("error while executing query %v", err)
+	}
+
+	data := make(map[string]string)
+	data["id"] = id
+	data["name"] = name
+	data["avatar_url"] = avatarUrl
+
+	return data
+}
+
+// Database health check. Returns a stats map.
 func (s *service) Health() map[string]string {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -71,7 +94,6 @@ func (s *service) Health() map[string]string {
 		return stats
 	}
 
-	// Database is up, add more statistics
 	stats["status"] = "up"
 	stats["message"] = "It's healthy"
 
@@ -85,8 +107,7 @@ func (s *service) Health() map[string]string {
 	stats["max_idle_closed"] = strconv.FormatInt(dbStats.MaxIdleClosed, 10)
 	stats["max_lifetime_closed"] = strconv.FormatInt(dbStats.MaxLifetimeClosed, 10)
 
-	// Evaluate stats to provide a health message
-	if dbStats.OpenConnections > 40 { // Assuming 50 is the max for this example
+	if dbStats.OpenConnections > 40 {
 		stats["message"] = "The database is experiencing heavy load."
 	}
 
@@ -105,10 +126,7 @@ func (s *service) Health() map[string]string {
 	return stats
 }
 
-// Close closes the database connection.
-// It logs a message indicating the disconnection from the specific database.
-// If the connection is successfully closed, it returns nil.
-// If an error occurs while closing the connection, it returns the error.
+// Close the database connection. Returns nil or err.
 func (s *service) Close() error {
 	log.Printf("Disconnected from database: %s", database)
 	return s.db.Close()
