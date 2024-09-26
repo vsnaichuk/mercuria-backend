@@ -17,6 +17,7 @@ type UserInfo struct {
 	OAuthId   string
 	Name      string
 	AvatarUrl string
+	Email     string
 }
 
 // Service represents a service that interacts with a database.
@@ -60,10 +61,11 @@ func (s *service) GetOrCreateUser(uinfo UserInfo) map[string]string {
 	var id, name, avatarUrl string
 
 	err := s.db.QueryRow(
-		"select * from public.get_or_create_user($1, $2, $3)",
+		"select * from public.get_or_create_user($1, $2, $3, $4)",
 		uinfo.OAuthId,
 		uinfo.Name,
 		uinfo.AvatarUrl,
+		uinfo.Email,
 	).Scan(&id, &name, &avatarUrl)
 
 	if err != nil {

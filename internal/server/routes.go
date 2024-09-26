@@ -56,6 +56,7 @@ func (s *FiberServer) GoogleIDTokenHandler(c *fiber.Ctx) error {
 		OAuthId:   payload.Claims["sub"].(string),
 		Name:      payload.Claims["name"].(string),
 		AvatarUrl: payload.Claims["picture"].(string),
+		Email:     payload.Claims["email"].(string),
 	}
 
 	return c.JSON(fiber.Map{
