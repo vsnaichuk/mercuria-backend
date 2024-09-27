@@ -19,9 +19,11 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	s.App.Post("/auth/google/verify-id-token", s.GoogleIDTokenHandler)
 
 	s.App.Post("/auth/apple/verify-id-token", s.AppleIDTokenHandler)
+
+	s.App.Post("events/create", s.CreateEvent)
 }
 
-// -- Handlers
+// -- Auth Handlers
 
 func (s *FiberServer) HelloWorldHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
@@ -52,16 +54,14 @@ func (s *FiberServer) GoogleIDTokenHandler(c *fiber.Ctx) error {
 		return ErrResp(c, 401, "Validation Failed")
 	}
 
-	userInfo := database.UserInfo{
-		OAuthId:   payload.Claims["sub"].(string),
-		Name:      payload.Claims["name"].(string),
-		AvatarUrl: payload.Claims["picture"].(string),
-		Email:     payload.Claims["email"].(string),
-	}
-
 	return c.JSON(fiber.Map{
 		"code": 200,
-		"data": s.db.GetOrCreateUser(userInfo),
+		"data": s.db.GetOrCreateUser(database.UserInfo{
+			OAuthId:   payload.Claims["sub"].(string),
+			Name:      payload.Claims["name"].(string),
+			AvatarUrl: payload.Claims["picture"].(string),
+			Email:     payload.Claims["email"].(string),
+		}),
 	})
 }
 
@@ -106,6 +106,38 @@ func (s *FiberServer) AppleIDTokenHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"code": 200,
 		"data": claims,
+	})
+}
+
+// -- Events Handlers
+
+func (s *FiberServer) CreateEvent(c *fiber.Ctx) error {
+	var requestBody struct {
+		Name  string `json:"name"`
+		Owner string `json:"owner"`
+	}
+
+	if err := c.BodyParser(&requestBody); err != nil {
+		return ErrResp(c, 400, "Body parse error")
+	}
+
+	requiredFields := map[string]string{
+		"Name":  requestBody.Name,
+		"Owner": requestBody.Owner,
+	}
+
+	for field, value := range requiredFields {
+		if value == "" {
+			return ErrResp(c, 400, "Require "+field)
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"code": 200,
+		"data": s.db.CreateEvent(database.EventInfo{
+			Name:  requestBody.Name,
+			Owner: requestBody.Owner,
+		}),
 	})
 }
 
