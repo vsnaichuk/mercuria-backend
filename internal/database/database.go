@@ -13,12 +13,12 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
-type EventInfo struct {
-	Name      string
+type Event struct {
+	Name  string 
 	Owner string
 }
 
-type UserInfo struct {
+type User struct {
 	OAuthId   string
 	Name      string
 	AvatarUrl string
@@ -27,8 +27,8 @@ type UserInfo struct {
 
 // Service represents a service that interacts with a database.
 type Service interface {
-	CreateEvent(einfo EventInfo) map[string]string
-	GetOrCreateUser(uinfo UserInfo) map[string]string
+	CreateEvent(einfo Event) map[string]string
+	GetOrCreateUser(uinfo User) map[string]string
 	Health() map[string]string
 	Close() error
 }
@@ -63,9 +63,8 @@ func New() Service {
 	return dbInstance
 }
 
-func (s *service) CreateEvent(einfo EventInfo) map[string]string {
+func (s *service) CreateEvent(einfo Event) map[string]string {
 	var id, name, owner string
-
 	err := s.db.QueryRow(
 		"select * from public.create_event($1, $2)",
 		einfo.Name,
@@ -83,9 +82,8 @@ func (s *service) CreateEvent(einfo EventInfo) map[string]string {
 	return data
 }
 
-func (s *service) GetOrCreateUser(uinfo UserInfo) map[string]string {
+func (s *service) GetOrCreateUser(uinfo User) map[string]string {
 	var id, name, avatarUrl string
-
 	err := s.db.QueryRow(
 		"select * from public.get_or_create_user($1, $2, $3, $4)",
 		uinfo.OAuthId,

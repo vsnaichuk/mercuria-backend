@@ -56,7 +56,7 @@ func (s *FiberServer) GoogleIDTokenHandler(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"code": 200,
-		"data": s.db.GetOrCreateUser(database.UserInfo{
+		"data": s.db.GetOrCreateUser(database.User{
 			OAuthId:   payload.Claims["sub"].(string),
 			Name:      payload.Claims["name"].(string),
 			AvatarUrl: payload.Claims["picture"].(string),
@@ -134,7 +134,7 @@ func (s *FiberServer) CreateEvent(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"code": 200,
-		"data": s.db.CreateEvent(database.EventInfo{
+		"data": s.db.CreateEvent(database.Event{
 			Name:  requestBody.Name,
 			Owner: requestBody.Owner,
 		}),
