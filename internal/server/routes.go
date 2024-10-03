@@ -20,7 +20,12 @@ func (s *FiberServer) RegisterFiberRoutes() {
 
 	s.App.Post("/auth/apple/verify-id-token", s.AppleIDTokenHandler)
 
+	s.App.Get("events/:id", s.GetEvent)
+
+	s.App.Get("events", s.GetEvents)
+
 	s.App.Post("events/create", s.CreateEvent)
+
 }
 
 // -- Auth Handlers
@@ -111,6 +116,22 @@ func (s *FiberServer) AppleIDTokenHandler(c *fiber.Ctx) error {
 
 // -- Events Handlers
 
+func (s *FiberServer) GetEvent(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	return c.JSON(fiber.Map{
+		"code": 200,
+		"data": s.db.GetEvent(id),
+	})
+}
+
+func (s *FiberServer) GetEvents(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"code": 200,
+		"data": s.db.GetEvents(),
+	})
+}
+
 func (s *FiberServer) CreateEvent(c *fiber.Ctx) error {
 	var requestBody struct {
 		Name  string `json:"name"`
@@ -132,14 +153,18 @@ func (s *FiberServer) CreateEvent(c *fiber.Ctx) error {
 		}
 	}
 
+	id := s.db.CreateEvent(database.Event{
+		Name:  requestBody.Name,
+		Owner: requestBody.Owner,
+	})
+
 	return c.JSON(fiber.Map{
 		"code": 200,
-		"data": s.db.CreateEvent(database.Event{
-			Name:  requestBody.Name,
-			Owner: requestBody.Owner,
-		}),
+		"data": s.db.GetEvent(id),
 	})
 }
+
+
 
 // -- Utils
 

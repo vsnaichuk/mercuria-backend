@@ -14,8 +14,11 @@ import (
 )
 
 type Event struct {
-	Name  string 
-	Owner string
+	ID        string         `json:"id"`
+    Name      string         `json:"name"`
+    CreatedAt string         `json:"created_at"`
+    Owner     string         `json:"owner"`
+    ImageURL  string         `json:"image_url"`
 }
 
 type User struct {
@@ -27,7 +30,9 @@ type User struct {
 
 // Service represents a service that interacts with a database.
 type Service interface {
-	CreateEvent(einfo Event) map[string]string
+	GetEvents() []Event
+	GetEvent(eid string) map[string]string
+	CreateEvent(einfo Event) string
 	GetOrCreateUser(uinfo User) map[string]string
 	Health() map[string]string
 	Close() error
@@ -63,23 +68,56 @@ func New() Service {
 	return dbInstance
 }
 
-func (s *service) CreateEvent(einfo Event) map[string]string {
-	var id, name, owner string
+func (s *service) GetEvents() []Event {
+    rows, err := s.db.Query("SELECT * FROM events")
+    if err != nil {
+		log.Fatalf("GetEvents %v", err)
+	}
+	defer rows.Close()
+
+	var events []Event
+    for rows.Next() {
+        var ev Event
+        err := rows.Scan(&ev.ID, &ev.Name, &ev.CreatedAt, &ev.Owner, &ev.ImageURL)
+        if err != nil {
+			log.Fatalf("GetEventsScan %v", err)
+		}
+        events = append(events, ev)
+    }
+    return events
+}
+
+func (s *service) GetEvent(eid string) map[string]string {
+	var id, name, createdAt, owner, imageUrl string
 	err := s.db.QueryRow(
-		"select * from public.create_event($1, $2)",
-		einfo.Name,
-		einfo.Owner,
-	).Scan(&id, &name, &owner)
+		"select * from public.get_event($1)", eid,
+	).Scan(&id, &name, &createdAt, &owner, &imageUrl)
 
 	if err != nil {
-		log.Fatalf("error while executing query %v", err)
+		log.Fatalf("GetEventQuery %v", err)
 	}
 
 	data := make(map[string]string)
 	data["id"] = id
 	data["name"] = name
+	data["created_at"] = createdAt
 	data["owner"] = owner
+	data["image_url"] = imageUrl
 	return data
+}
+
+func (s *service) CreateEvent(einfo Event) string {
+	var id string
+	err := s.db.QueryRow(
+		"select * from public.create_event($1, $2)",
+		einfo.Name,
+		einfo.Owner,
+	).Scan(&id)
+
+	if err != nil {
+		log.Fatalf("CreateEventQuery  %v", err)
+	}
+	return id
 }
 
 func (s *service) GetOrCreateUser(uinfo User) map[string]string {
@@ -93,14 +131,13 @@ func (s *service) GetOrCreateUser(uinfo User) map[string]string {
 	).Scan(&id, &name, &avatarUrl)
 
 	if err != nil {
-		log.Fatalf("error while executing query %v", err)
+		log.Fatalf("GetOrCreateUserQuery  %v", err)
 	}
 
 	data := make(map[string]string)
 	data["id"] = id
 	data["name"] = name
 	data["avatar_url"] = avatarUrl
-
 	return data
 }
 
