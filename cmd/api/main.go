@@ -14,7 +14,7 @@ func main() {
 	server.RegisterFiberRoutes()
 	// host, _ := strconv.Atoi(os.Getenv("HOST"))
 	// port, _ := strconv.Atoi(os.Getenv("PORT"))
-	err := server.Listen(fmt.Sprintf("192.168.0.100:8080"))
+	err := server.Listen(fmt.Sprintf("192.168.0.101:8080"))
 	if err != nil {
 		panic(fmt.Sprintf("cannot start server: %s", err))
 	}

@@ -14,24 +14,26 @@ import (
 )
 
 type Event struct {
-	ID        string         `json:"id"`
-    Name      string         `json:"name"`
-    CreatedAt string         `json:"created_at"`
-    Owner     string         `json:"owner"`
-    ImageURL  string         `json:"image_url"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"created_at"`
+	Owner     string `json:"owner"`
+	ImageURL  string `json:"image_url"`
+	OwnerData User   `json:"owner_data"`
 }
 
 type User struct {
-	OAuthId   string
-	Name      string
-	AvatarUrl string
-	Email     string
+	ID        string `json:"id"`
+	OAuthId   string `json:"oauth_id"`
+	Name      string `json:"name"`
+	AvatarUrl string `json:"avatar_url"`
+	Email     string `json:"email"`
 }
 
 // Service represents a service that interacts with a database.
 type Service interface {
 	GetEvents() []Event
-	GetEvent(eid string) map[string]string
+	GetEvent(eid string) Event
 	CreateEvent(einfo Event) string
 	GetOrCreateUser(uinfo User) map[string]string
 	Health() map[string]string
@@ -69,41 +71,56 @@ func New() Service {
 }
 
 func (s *service) GetEvents() []Event {
-    rows, err := s.db.Query("SELECT * FROM events")
-    if err != nil {
+	rows, err := s.db.Query("select * from public.get_events()")
+	if err != nil {
 		log.Fatalf("GetEvents %v", err)
 	}
 	defer rows.Close()
 
 	var events []Event
-    for rows.Next() {
-        var ev Event
-        err := rows.Scan(&ev.ID, &ev.Name, &ev.CreatedAt, &ev.Owner, &ev.ImageURL)
-        if err != nil {
+	for rows.Next() {
+		var ev Event
+		err := rows.Scan(
+			&ev.ID,
+			&ev.Name,
+			&ev.CreatedAt,
+			&ev.Owner,
+			&ev.ImageURL,
+			&ev.OwnerData.ID,
+			&ev.OwnerData.OAuthId,
+			&ev.OwnerData.Name,
+			&ev.OwnerData.AvatarUrl,
+			&ev.OwnerData.Email,
+		)
+		if err != nil {
 			log.Fatalf("GetEventsScan %v", err)
 		}
-        events = append(events, ev)
-    }
-    return events
+		events = append(events, ev)
+	}
+	return events
 }
 
-func (s *service) GetEvent(eid string) map[string]string {
-	var id, name, createdAt, owner, imageUrl string
+func (s *service) GetEvent(eid string) Event {
+	var ev Event
 	err := s.db.QueryRow(
 		"select * from public.get_event($1)", eid,
-	).Scan(&id, &name, &createdAt, &owner, &imageUrl)
+	).Scan(
+		&ev.ID,
+		&ev.Name,
+		&ev.CreatedAt,
+		&ev.Owner,
+		&ev.ImageURL,
+		&ev.OwnerData.ID,
+		&ev.OwnerData.OAuthId,
+		&ev.OwnerData.Name,
+		&ev.OwnerData.AvatarUrl,
+		&ev.OwnerData.Email,
+	)
 
 	if err != nil {
 		log.Fatalf("GetEventQuery %v", err)
 	}
-
-	data := make(map[string]string)
-	data["id"] = id
-	data["name"] = name
-	data["created_at"] = createdAt
-	data["owner"] = owner
-	data["image_url"] = imageUrl
-	return data
+	return ev
 }
 
 func (s *service) CreateEvent(einfo Event) string {
