@@ -8,7 +8,10 @@ require (
 	github.com/joho/godotenv v1.5.1
 )
 
-require github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
+require (
+	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
+)
 
 require (
 	cloud.google.com/go/auth v0.9.3 // indirect
@@ -25,6 +28,7 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect

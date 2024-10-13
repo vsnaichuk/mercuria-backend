@@ -26,6 +26,9 @@ func (s *FiberServer) RegisterFiberRoutes() {
 
 	s.App.Post("events/create", s.CreateEvent)
 
+	s.App.Post("events/like", s.LikeEvent)
+
+	s.App.Delete("events/like", s.DislikeEvent)
 }
 
 // -- Auth Handlers
@@ -118,10 +121,10 @@ func (s *FiberServer) AppleIDTokenHandler(c *fiber.Ctx) error {
 
 func (s *FiberServer) GetEvent(c *fiber.Ctx) error {
 	id := c.Params("id")
-
+	event, _ := s.db.GetEvent(id)
 	return c.JSON(fiber.Map{
 		"code": 200,
-		"data": s.db.GetEvent(id),
+		"data": event,
 	})
 }
 
@@ -158,13 +161,51 @@ func (s *FiberServer) CreateEvent(c *fiber.Ctx) error {
 		Owner: requestBody.Owner,
 	})
 
+	event, _ := s.db.GetEvent(id)
+
 	return c.JSON(fiber.Map{
 		"code": 200,
-		"data": s.db.GetEvent(id),
+		"data": event,
 	})
 }
 
+func (s *FiberServer) LikeEvent(c *fiber.Ctx) error {
+	var body struct {
+		UserId  string `json:"user_id"`
+		EventId string `json:"event_id"`
+	}
 
+	if err := c.BodyParser(&body); err != nil {
+		return ErrResp(c, 400, "Body parse error")
+	}
+	if body.UserId == "" || body.EventId == "" {
+		return ErrResp(c, 400, "Required UserId and EventId")
+	}
+
+	return c.JSON(fiber.Map{
+		"code": 200,
+		"data": s.db.LikeEvent(body.UserId, body.EventId),
+	})
+}
+
+func (s *FiberServer) DislikeEvent(c *fiber.Ctx) error {
+	var body struct {
+		UserId  string `json:"user_id"`
+		EventId string `json:"event_id"`
+	}
+
+	if err := c.BodyParser(&body); err != nil {
+		return ErrResp(c, 400, "Body parse error")
+	}
+	if body.UserId == "" || body.EventId == "" {
+		return ErrResp(c, 400, "Required UserId and EventId")
+	}
+
+	return c.JSON(fiber.Map{
+		"code": 200,
+		"data": s.db.DislikeEvent(body.UserId, body.EventId),
+	})
+}
 
 // -- Utils
 

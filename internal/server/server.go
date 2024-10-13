@@ -20,11 +20,11 @@ func New() *FiberServer {
 	})
 
 	App.Use(cors.New(cors.Config{
-		AllowOrigins:     "*", //@TODO For security set: 
-													 // os.Getenv("CLIENT_URL") and AllowCredentials: true
+		AllowOrigins: "*", //@TODO For security set:
+		// os.Getenv("CLIENT_URL") and AllowCredentials: true
 		AllowCredentials: false,
 		AllowHeaders:     "Content-Type, Content-Length, Accept-Encoding, Authorization, accept, origin",
-		AllowMethods:     "POST, OPTIONS, GET, PUT",
+		AllowMethods:     "POST, OPTIONS, GET, PUT, DELETE",
 		ExposeHeaders:    "Set-Cookie",
 	}))
 

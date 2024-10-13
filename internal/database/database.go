@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"maps"
 	"os"
+	"slices"
 	"strconv"
 	"time"
 
@@ -14,12 +16,20 @@ import (
 )
 
 type Event struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	Owner     string    `json:"owner"`
+	ImageURL  string    `json:"image_url"`
+	OwnerData User      `json:"owner_data"`
+	Likes     []Like    `json:"likes"`
+}
+
+type Like struct {
+	ID        int    `json:"id"`
+	UserID    string `json:"user_id"`
+	EventID   string `json:"event_id"`
 	CreatedAt string `json:"created_at"`
-	Owner     string `json:"owner"`
-	ImageURL  string `json:"image_url"`
-	OwnerData User   `json:"owner_data"`
 }
 
 type User struct {
@@ -32,8 +42,10 @@ type User struct {
 
 // Service represents a service that interacts with a database.
 type Service interface {
-	GetEvents() []Event
-	GetEvent(eid string) Event
+	LikeEvent(uid string, eid string) string
+	DislikeEvent(uid string, eid string) string
+	GetEvents() []*Event
+	GetEvent(eid string) (*Event, error)
 	CreateEvent(einfo Event) string
 	GetOrCreateUser(uinfo User) map[string]string
 	Health() map[string]string
@@ -70,63 +82,62 @@ func New() Service {
 	return dbInstance
 }
 
-func (s *service) GetEvents() []Event {
-	rows, err := s.db.Query("select * from public.get_events()")
+func (s *service) LikeEvent(uid string, eid string) string {
+	_, err := s.db.Query("INSERT INTO likes (user_id, event_id) VALUES ($1, $2)", uid, eid)
+	if err != nil {
+		log.Fatalf("LikeEventQuery %v", err)
+	}
+	return "success"
+}
+
+func (s *service) DislikeEvent(uid string, eid string) string {
+	_, err := s.db.Query("DELETE FROM likes WHERE user_id = $1 AND event_id = $2;", uid, eid)
+	if err != nil {
+		log.Fatalf("DislikeEventQuery %v", err)
+	}
+	return "success"
+}
+
+func (s *service) GetEvents() []*Event {
+	rows, err := s.db.Query("SELECT * FROM public.get_events()")
 	if err != nil {
 		log.Fatalf("GetEvents %v", err)
 	}
 	defer rows.Close()
 
-	var events []Event
-	for rows.Next() {
-		var ev Event
-		err := rows.Scan(
-			&ev.ID,
-			&ev.Name,
-			&ev.CreatedAt,
-			&ev.Owner,
-			&ev.ImageURL,
-			&ev.OwnerData.ID,
-			&ev.OwnerData.OAuthId,
-			&ev.OwnerData.Name,
-			&ev.OwnerData.AvatarUrl,
-			&ev.OwnerData.Email,
-		)
-		if err != nil {
-			log.Fatalf("GetEventsScan %v", err)
-		}
-		events = append(events, ev)
+	events, err := s.scanEventRows(rows)
+	if err != nil {
+		log.Fatalf("GetEventsScan %v", err)
 	}
-	return events
+
+	slice := slices.Collect(maps.Values(events))
+	slices.SortFunc(slice, func(a, b *Event) int { 
+		return b.CreatedAt.Compare(a.CreatedAt) 
+	})
+	return slice
 }
 
-func (s *service) GetEvent(eid string) Event {
-	var ev Event
-	err := s.db.QueryRow(
-		"select * from public.get_event($1)", eid,
-	).Scan(
-		&ev.ID,
-		&ev.Name,
-		&ev.CreatedAt,
-		&ev.Owner,
-		&ev.ImageURL,
-		&ev.OwnerData.ID,
-		&ev.OwnerData.OAuthId,
-		&ev.OwnerData.Name,
-		&ev.OwnerData.AvatarUrl,
-		&ev.OwnerData.Email,
-	)
-
+func (s *service) GetEvent(eid string) (*Event, error) {
+	rows, err := s.db.Query("SELECT * FROM public.get_event($1)", eid)
 	if err != nil {
 		log.Fatalf("GetEventQuery %v", err)
 	}
-	return ev
+	defer rows.Close()
+
+	events, err := s.scanEventRows(rows)
+	if err != nil {
+		log.Fatalf("GetEventScan %v", err)
+	}
+
+	if event, exists := events[eid]; exists {
+		return event, nil
+	}
+	return nil, fmt.Errorf("event with ID %s not found", eid)
 }
 
 func (s *service) CreateEvent(einfo Event) string {
 	var id string
-	err := s.db.QueryRow(
-		"select * from public.create_event($1, $2)",
+	err := s.db.QueryRow("SELECT * FROM public.create_event($1, $2)",
 		einfo.Name,
 		einfo.Owner,
 	).Scan(&id)
@@ -140,7 +151,7 @@ func (s *service) CreateEvent(einfo Event) string {
 func (s *service) GetOrCreateUser(uinfo User) map[string]string {
 	var id, name, avatarUrl string
 	err := s.db.QueryRow(
-		"select * from public.get_or_create_user($1, $2, $3, $4)",
+		"SELECT * FROM public.get_or_create_user($1, $2, $3, $4)",
 		uinfo.OAuthId,
 		uinfo.Name,
 		uinfo.AvatarUrl,
@@ -158,7 +169,6 @@ func (s *service) GetOrCreateUser(uinfo User) map[string]string {
 	return data
 }
 
-// Database health check. Returns a stats map.
 func (s *service) Health() map[string]string {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -190,15 +200,12 @@ func (s *service) Health() map[string]string {
 	if dbStats.OpenConnections > 40 {
 		stats["message"] = "The database is experiencing heavy load."
 	}
-
 	if dbStats.WaitCount > 1000 {
 		stats["message"] = "The database has a high number of wait events, indicating potential bottlenecks."
 	}
-
 	if dbStats.MaxIdleClosed > int64(dbStats.OpenConnections)/2 {
 		stats["message"] = "Many idle connections are being closed, consider revising the connection pool settings."
 	}
-
 	if dbStats.MaxLifetimeClosed > int64(dbStats.OpenConnections)/2 {
 		stats["message"] = "Many connections are being closed due to max lifetime, consider increasing max lifetime or revising the connection usage pattern."
 	}
@@ -206,8 +213,59 @@ func (s *service) Health() map[string]string {
 	return stats
 }
 
-// Close the database connection. Returns nil or err.
 func (s *service) Close() error {
 	log.Printf("Disconnected from database: %s", database)
 	return s.db.Close()
+}
+
+// --- Helpers
+
+func (s *service) scanEventRows(rows *sql.Rows) (map[string]*Event, error) {
+	events := make(map[string]*Event)
+
+	for rows.Next() {
+		var id, name, owner, image string
+		var created time.Time
+		var ownerID, ownerAuthID, ownerName, ownerAvatar, ownerEmail string
+		var likeID sql.NullInt32
+		var likeUID, likeEventID, likeCreated sql.NullString
+
+		// Scan the row into appropriate variables
+		err := rows.Scan(&id, &name, &created, &owner, &image,
+			&ownerID, &ownerAuthID, &ownerName, &ownerAvatar, &ownerEmail,
+			&likeID, &likeUID, &likeEventID, &likeCreated)
+
+		if err != nil {
+			return nil, fmt.Errorf("processEventRows: %v", err)
+		}
+
+		if _, exists := events[id]; !exists {
+			events[id] = &Event{
+				ID:        id,
+				Name:      name,
+				CreatedAt: created,
+				Owner:     owner,
+				ImageURL:  image,
+				OwnerData: User{
+					ID:        ownerID,
+					OAuthId:   ownerAuthID,
+					Name:      ownerName,
+					AvatarUrl: ownerAvatar,
+					Email:     ownerEmail,
+				},
+				Likes: []Like{},
+			}
+		}
+
+		if likeID.Valid {
+			events[id].Likes = append(events[id].Likes, Like{
+				ID:        int(likeID.Int32),
+				UserID:    likeUID.String,
+				EventID:   likeEventID.String,
+				CreatedAt: likeCreated.String,
+			})
+		}
+	}
+
+	return events, nil
 }
