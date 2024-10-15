@@ -19,10 +19,11 @@ type Event struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
-	Owner     string    `json:"owner"`
+	OwnerID   string    `json:"owner_id"`
 	ImageURL  string    `json:"image_url"`
-	OwnerData User      `json:"owner_data"`
+	Owner     User      `json:"owner"`
 	Likes     []Like    `json:"likes"`
+	Members   []User    `json:"members"`
 }
 
 type Like struct {
@@ -44,7 +45,7 @@ type User struct {
 type Service interface {
 	LikeEvent(uid string, eid string) string
 	DislikeEvent(uid string, eid string) string
-	GetEvents() []*Event
+	GetUserEvents(uid string) []*Event
 	GetEvent(eid string) (*Event, error)
 	CreateEvent(einfo Event) string
 	GetOrCreateUser(uinfo User) map[string]string
@@ -98,21 +99,21 @@ func (s *service) DislikeEvent(uid string, eid string) string {
 	return "success"
 }
 
-func (s *service) GetEvents() []*Event {
-	rows, err := s.db.Query("SELECT * FROM public.get_events()")
+func (s *service) GetUserEvents(uid string) []*Event {
+	rows, err := s.db.Query("SELECT * FROM public.get_events($1)", uid)
 	if err != nil {
-		log.Fatalf("GetEvents %v", err)
+		log.Fatalf("GetUserEvents %v", err)
 	}
 	defer rows.Close()
 
 	events, err := s.scanEventRows(rows)
 	if err != nil {
-		log.Fatalf("GetEventsScan %v", err)
+		log.Fatalf("GetUserEventsScan %v", err)
 	}
 
 	slice := slices.Collect(maps.Values(events))
-	slices.SortFunc(slice, func(a, b *Event) int { 
-		return b.CreatedAt.Compare(a.CreatedAt) 
+	slices.SortFunc(slice, func(a, b *Event) int {
+		return b.CreatedAt.Compare(a.CreatedAt)
 	})
 	return slice
 }
@@ -139,7 +140,7 @@ func (s *service) CreateEvent(einfo Event) string {
 	var id string
 	err := s.db.QueryRow("SELECT * FROM public.create_event($1, $2)",
 		einfo.Name,
-		einfo.Owner,
+		einfo.OwnerID,
 	).Scan(&id)
 
 	if err != nil {
@@ -226,14 +227,18 @@ func (s *service) scanEventRows(rows *sql.Rows) (map[string]*Event, error) {
 	for rows.Next() {
 		var id, name, owner, image string
 		var created time.Time
-		var ownerID, ownerAuthID, ownerName, ownerAvatar, ownerEmail string
+		var ownerID, ownerAuthID, ownerName string
+		var ownerAvatar, ownerEmail string
 		var likeID sql.NullInt32
-		var likeUID, likeEventID, likeCreated sql.NullString
+		var likeUID, likeEID, likeCreated sql.NullString
+		var mbrID, mbrAuthID, mbrName string
+		var mbrAvatar, mbrEmail string
 
 		// Scan the row into appropriate variables
 		err := rows.Scan(&id, &name, &created, &owner, &image,
 			&ownerID, &ownerAuthID, &ownerName, &ownerAvatar, &ownerEmail,
-			&likeID, &likeUID, &likeEventID, &likeCreated)
+			&likeID, &likeUID, &likeEID, &likeCreated,
+			&mbrID, &mbrAuthID, &mbrName, &mbrAvatar, &mbrEmail)
 
 		if err != nil {
 			return nil, fmt.Errorf("processEventRows: %v", err)
@@ -244,9 +249,9 @@ func (s *service) scanEventRows(rows *sql.Rows) (map[string]*Event, error) {
 				ID:        id,
 				Name:      name,
 				CreatedAt: created,
-				Owner:     owner,
+				OwnerID:   ownerID,
 				ImageURL:  image,
-				OwnerData: User{
+				Owner: User{
 					ID:        ownerID,
 					OAuthId:   ownerAuthID,
 					Name:      ownerName,
@@ -261,10 +266,18 @@ func (s *service) scanEventRows(rows *sql.Rows) (map[string]*Event, error) {
 			events[id].Likes = append(events[id].Likes, Like{
 				ID:        int(likeID.Int32),
 				UserID:    likeUID.String,
-				EventID:   likeEventID.String,
+				EventID:   likeEID.String,
 				CreatedAt: likeCreated.String,
 			})
 		}
+
+		events[id].Members = append(events[id].Members, User{
+			ID:        mbrID,
+			OAuthId:   mbrAuthID,
+			Name:      mbrName,
+			AvatarUrl: mbrAvatar,
+			Email:     mbrEmail,
+		})
 	}
 
 	return events, nil

@@ -22,7 +22,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 
 	s.App.Get("events/:id", s.GetEvent)
 
-	s.App.Get("events", s.GetEvents)
+	s.App.Get("events/user/:id", s.GetUserEvents)
 
 	s.App.Post("events/create", s.CreateEvent)
 
@@ -44,15 +44,15 @@ func (s *FiberServer) HealthHandler(c *fiber.Ctx) error {
 }
 
 func (s *FiberServer) GoogleIDTokenHandler(c *fiber.Ctx) error {
-	var requestBody struct {
+	var body struct {
 		Token string `json:"token"`
 	}
 
-	if err := c.BodyParser(&requestBody); err != nil {
+	if err := c.BodyParser(&body); err != nil {
 		return ErrResp(c, 400, "Body parse error")
 	}
 
-	token := requestBody.Token
+	token := body.Token
 	if token == "" {
 		return ErrResp(c, 400, "Token is required")
 	}
@@ -75,16 +75,13 @@ func (s *FiberServer) GoogleIDTokenHandler(c *fiber.Ctx) error {
 
 // TODO: Test
 func (s *FiberServer) AppleIDTokenHandler(c *fiber.Ctx) error {
-	var requestBody struct {
+	var body struct {
 		Token string `json:"token"`
 	}
-
-	if err := c.BodyParser(&requestBody); err != nil {
+	if err := c.BodyParser(&body); err != nil {
 		return ErrResp(c, 400, "Body parse error")
 	}
-
-	token := requestBody.Token
-	if token == "" {
+	if body.Token == "" {
 		return ErrResp(c, 400, "Token is required")
 	}
 
@@ -102,7 +99,7 @@ func (s *FiberServer) AppleIDTokenHandler(c *fiber.Ctx) error {
 	err := client.VerifyAppToken(context.Background(), apple.AppValidationTokenRequest{
 		ClientID:     clientID,
 		ClientSecret: secret,
-		Code:         token,
+		Code:         body.Token,
 	}, &res)
 
 	if err != nil {
@@ -128,26 +125,27 @@ func (s *FiberServer) GetEvent(c *fiber.Ctx) error {
 	})
 }
 
-func (s *FiberServer) GetEvents(c *fiber.Ctx) error {
+func (s *FiberServer) GetUserEvents(c *fiber.Ctx) error {
+	userId := c.Params("id")
 	return c.JSON(fiber.Map{
 		"code": 200,
-		"data": s.db.GetEvents(),
+		"data": s.db.GetUserEvents(userId),
 	})
 }
 
 func (s *FiberServer) CreateEvent(c *fiber.Ctx) error {
-	var requestBody struct {
+	var body struct {
 		Name  string `json:"name"`
-		Owner string `json:"owner"`
+		OwnerID string `json:"owner"`
 	}
 
-	if err := c.BodyParser(&requestBody); err != nil {
+	if err := c.BodyParser(&body); err != nil {
 		return ErrResp(c, 400, "Body parse error")
 	}
 
 	requiredFields := map[string]string{
-		"Name":  requestBody.Name,
-		"Owner": requestBody.Owner,
+		"Name":  body.Name,
+		"OwnerID": body.OwnerID,
 	}
 
 	for field, value := range requiredFields {
@@ -157,8 +155,8 @@ func (s *FiberServer) CreateEvent(c *fiber.Ctx) error {
 	}
 
 	id := s.db.CreateEvent(database.Event{
-		Name:  requestBody.Name,
-		Owner: requestBody.Owner,
+		Name:  body.Name,
+		OwnerID: body.OwnerID,
 	})
 
 	event, _ := s.db.GetEvent(id)
