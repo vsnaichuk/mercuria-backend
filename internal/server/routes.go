@@ -28,7 +28,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 
 	s.App.Post("events/like", s.LikeEvent)
 
-	s.App.Delete("events/like", s.DislikeEvent)
+	s.App.Delete("events/dislike", s.DislikeEvent)
 }
 
 // -- Auth Handlers
@@ -135,7 +135,7 @@ func (s *FiberServer) GetUserEvents(c *fiber.Ctx) error {
 
 func (s *FiberServer) CreateEvent(c *fiber.Ctx) error {
 	var body struct {
-		Name  string `json:"name"`
+		Name    string `json:"name"`
 		OwnerID string `json:"owner"`
 	}
 
@@ -144,7 +144,7 @@ func (s *FiberServer) CreateEvent(c *fiber.Ctx) error {
 	}
 
 	requiredFields := map[string]string{
-		"Name":  body.Name,
+		"Name":    body.Name,
 		"OwnerID": body.OwnerID,
 	}
 
@@ -155,7 +155,7 @@ func (s *FiberServer) CreateEvent(c *fiber.Ctx) error {
 	}
 
 	id := s.db.CreateEvent(database.Event{
-		Name:  body.Name,
+		Name:    body.Name,
 		OwnerID: body.OwnerID,
 	})
 
