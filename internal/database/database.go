@@ -15,6 +15,23 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
+type InviteStatus string
+
+const (
+	InvitePending  InviteStatus = "Pending"
+	InviteAccepted InviteStatus = "Accepted"
+	InviteDeclined InviteStatus = "Declined"
+)
+
+type Invite struct {
+	ID        int          `json:"id"`
+	UserID    int          `json:"user_id"`
+	EventID   int          `json:"event_id"`
+	Status    InviteStatus `json:"status"`
+	CreatedAt time.Time    `json:"created_at"`
+	ExpiresAt time.Time    `json:"expires_at"`
+}
+
 type Event struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
@@ -43,10 +60,11 @@ type User struct {
 
 // Service represents a service that interacts with a database.
 type Service interface {
-	LikeEvent(uid string, eid string) string
-	DislikeEvent(uid string, eid string) string
-	GetUserEvents(uid string) []*Event
-	GetEvent(eid string) (*Event, error)
+	CreateEventInvite(eventId string, createdBy string) string
+	LikeEvent(userId string, eventId string) string
+	DislikeEvent(userId string, eventId string) string
+	GetUserEvents(userId string) []*Event
+	GetEvent(eventId string) (*Event, error)
 	CreateEvent(einfo Event) string
 	GetOrCreateUser(uinfo User) map[string]string
 	Health() map[string]string
@@ -64,6 +82,7 @@ var (
 	port       = os.Getenv("DB_PORT")
 	host       = os.Getenv("DB_HOST")
 	schema     = os.Getenv("DB_SCHEMA")
+	url        = os.Getenv("DB_URL")
 	dbInstance *service
 )
 
@@ -72,8 +91,7 @@ func New() Service {
 	if dbInstance != nil {
 		return dbInstance
 	}
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s", username, password, host, port, database, schema)
-	db, err := sql.Open("pgx", connStr)
+	db, err := sql.Open("pgx", url)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -83,24 +101,37 @@ func New() Service {
 	return dbInstance
 }
 
-func (s *service) LikeEvent(uid string, eid string) string {
-	_, err := s.db.Query("INSERT INTO likes (user_id, event_id) VALUES ($1, $2)", uid, eid)
+func (s *service) CreateEventInvite(eventId string, createdBy string) string {
+	var id string
+	err := s.db.QueryRow("INSERT INTO invites (event_id, created_by) VALUES ($1, $2) RETURNING id",
+		eventId,
+		createdBy,
+	).Scan(&id)
+
+	if err != nil {
+		log.Fatalf("CreateEventInviteQuery %v", err)
+	}
+	return id
+}
+
+func (s *service) LikeEvent(userId string, eventId string) string {
+	_, err := s.db.Query("INSERT INTO likes (user_id, event_id) VALUES ($1, $2)", userId, eventId)
 	if err != nil {
 		log.Fatalf("LikeEventQuery %v", err)
 	}
 	return "success"
 }
 
-func (s *service) DislikeEvent(uid string, eid string) string {
-	_, err := s.db.Query("DELETE FROM likes WHERE user_id = $1 AND event_id = $2;", uid, eid)
+func (s *service) DislikeEvent(userId string, eventId string) string {
+	_, err := s.db.Query("DELETE FROM likes WHERE user_id = $1 AND event_id = $2;", userId, eventId)
 	if err != nil {
 		log.Fatalf("DislikeEventQuery %v", err)
 	}
 	return "success"
 }
 
-func (s *service) GetUserEvents(uid string) []*Event {
-	rows, err := s.db.Query("SELECT * FROM public.get_events($1)", uid)
+func (s *service) GetUserEvents(userId string) []*Event {
+	rows, err := s.db.Query("SELECT * FROM public.get_events($1)", userId)
 	if err != nil {
 		log.Fatalf("GetUserEvents %v", err)
 	}
@@ -118,8 +149,8 @@ func (s *service) GetUserEvents(uid string) []*Event {
 	return slice
 }
 
-func (s *service) GetEvent(eid string) (*Event, error) {
-	rows, err := s.db.Query("SELECT * FROM public.get_event($1)", eid)
+func (s *service) GetEvent(eventId string) (*Event, error) {
+	rows, err := s.db.Query("SELECT * FROM public.get_event($1)", eventId)
 	if err != nil {
 		log.Fatalf("GetEventQuery %v", err)
 	}
@@ -130,10 +161,10 @@ func (s *service) GetEvent(eid string) (*Event, error) {
 		log.Fatalf("GetEventScan %v", err)
 	}
 
-	if event, exists := events[eid]; exists {
+	if event, exists := events[eventId]; exists {
 		return event, nil
 	}
-	return nil, fmt.Errorf("event with ID %s not found", eid)
+	return nil, fmt.Errorf("event with ID %s not found", eventId)
 }
 
 func (s *service) CreateEvent(einfo Event) string {

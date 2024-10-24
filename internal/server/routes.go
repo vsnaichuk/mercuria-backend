@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"mercuria-backend/internal/database"
@@ -16,9 +17,9 @@ func (s *FiberServer) RegisterFiberRoutes() {
 
 	s.App.Get("/health", s.HealthHandler)
 
-	s.App.Post("/auth/google/verify-id-token", s.GoogleIDTokenHandler)
+	s.App.Post("/auth/google/login", s.GoogleLoginHandler)
 
-	s.App.Post("/auth/apple/verify-id-token", s.AppleIDTokenHandler)
+	s.App.Post("/auth/apple/login", s.AppleLoginHandler)
 
 	s.App.Get("events/:id", s.GetEvent)
 
@@ -29,6 +30,8 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	s.App.Post("events/like", s.LikeEvent)
 
 	s.App.Delete("events/dislike", s.DislikeEvent)
+
+	s.App.Post("events/create-invite", s.CreateEventInvite)
 }
 
 // -- Auth Handlers
@@ -43,23 +46,27 @@ func (s *FiberServer) HealthHandler(c *fiber.Ctx) error {
 	return c.JSON(s.db.Health())
 }
 
-func (s *FiberServer) GoogleIDTokenHandler(c *fiber.Ctx) error {
+func (s *FiberServer) GoogleLoginHandler(c *fiber.Ctx) error {
 	var body struct {
-		Token string `json:"token"`
+		Token  string  `json:"token"`
+		Invite *string `json:"invite"`
 	}
 
 	if err := c.BodyParser(&body); err != nil {
 		return ErrResp(c, 400, "Body parse error")
 	}
-
-	token := body.Token
-	if token == "" {
+	if body.Token == "" {
 		return ErrResp(c, 400, "Token is required")
 	}
 
-	payload, err := idtoken.Validate(context.Background(), token, "")
+	payload, err := idtoken.Validate(context.Background(), body.Token, "")
 	if err != nil {
 		return ErrResp(c, 401, "Validation Failed")
+	}
+
+	if body.Invite != nil {
+		fmt.Println(body.Invite)
+		// invite, err := db.FindInviteByToken(token)
 	}
 
 	return c.JSON(fiber.Map{
@@ -74,7 +81,7 @@ func (s *FiberServer) GoogleIDTokenHandler(c *fiber.Ctx) error {
 }
 
 // TODO: Test
-func (s *FiberServer) AppleIDTokenHandler(c *fiber.Ctx) error {
+func (s *FiberServer) AppleLoginHandler(c *fiber.Ctx) error {
 	var body struct {
 		Token string `json:"token"`
 	}
@@ -181,8 +188,8 @@ func (s *FiberServer) LikeEvent(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"code": 200,
-		"data": s.db.LikeEvent(body.UserId, body.EventId),
+		"code":    200,
+		"message": s.db.LikeEvent(body.UserId, body.EventId),
 	})
 }
 
@@ -200,8 +207,29 @@ func (s *FiberServer) DislikeEvent(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
+		"code":    200,
+		"message": s.db.DislikeEvent(body.UserId, body.EventId),
+	})
+}
+
+func (s *FiberServer) CreateEventInvite(c *fiber.Ctx) error {
+	var body struct {
+		EventId   string `json:"event_id"`
+		CreatedBy string `json:"created_by"`
+	}
+
+	if err := c.BodyParser(&body); err != nil {
+		return ErrResp(c, 400, "Body parse error")
+	}
+	if body.CreatedBy == "" || body.EventId == "" {
+		return ErrResp(c, 400, "Required EventId and CreatedBy")
+	}
+
+	return c.JSON(fiber.Map{
 		"code": 200,
-		"data": s.db.DislikeEvent(body.UserId, body.EventId),
+		"data": fiber.Map{
+			"id": s.db.CreateEventInvite(body.EventId, body.CreatedBy),
+		},
 	})
 }
 

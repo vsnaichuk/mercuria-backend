@@ -1,4 +1,4 @@
-# Simple Makefile for a Go project
+include .env
 
 # Build the application
 all: build
@@ -70,3 +70,19 @@ watch:
 
 
 .PHONY: all build run test clean watch
+
+# Custom scripts using golang-migrate CLI:
+# Create DB migration 
+
+migration-create: 
+	migrate create -ext sql -dir internal/database -seq $(name)
+
+# Migrate DB
+
+migration-migrate:
+	migrate -path internal/database/ -database $(DB_URL) --verbose up
+
+# Force DB Migration
+
+migration-force:
+	migrate -path internal/database/ -database $(DB_URL) force ${ver}
