@@ -60,7 +60,7 @@ type User struct {
 
 // Service represents a service that interacts with a database.
 type Service interface {
-	CreateEventInvite(eventId string, createdBy string) string
+	AddEventMember(userId string, eventId string) string
 	LikeEvent(userId string, eventId string) string
 	DislikeEvent(userId string, eventId string) string
 	GetUserEvents(userId string) []*Event
@@ -101,18 +101,26 @@ func New() Service {
 	return dbInstance
 }
 
-func (s *service) CreateEventInvite(eventId string, createdBy string) string {
-	var id string
-	err := s.db.QueryRow("INSERT INTO invites (event_id, created_by) VALUES ($1, $2) RETURNING id",
-		eventId,
-		createdBy,
-	).Scan(&id)
-
+func (s *service) AddEventMember(userId string, eventId string) string {
+	_, err := s.db.Query("INSERT INTO members (user_id, event_id) VALUES ($1, $2)", userId, eventId)
 	if err != nil {
-		log.Fatalf("CreateEventInviteQuery %v", err)
+		log.Fatalf("AddEventMemberQuery %v", err)
 	}
-	return id
+	return "success"
 }
+
+// func (s *service) CreateEventInvite(eventId string, createdBy string) string {
+// 	var id string
+// 	err := s.db.QueryRow("INSERT INTO invites (event_id, created_by) VALUES ($1, $2) RETURNING id",
+// 		eventId,
+// 		createdBy,
+// 	).Scan(&id)
+
+// 	if err != nil {
+// 		log.Fatalf("CreateEventInviteQuery %v", err)
+// 	}
+// 	return id
+// }
 
 func (s *service) LikeEvent(userId string, eventId string) string {
 	_, err := s.db.Query("INSERT INTO likes (user_id, event_id) VALUES ($1, $2)", userId, eventId)

@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"mercuria-backend/internal/database"
@@ -31,7 +30,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 
 	s.App.Delete("events/dislike", s.DislikeEvent)
 
-	s.App.Post("events/create-invite", s.CreateEventInvite)
+	// s.App.Post("events/create-invite", s.CreateEventInvite)
 }
 
 // -- Auth Handlers
@@ -48,8 +47,8 @@ func (s *FiberServer) HealthHandler(c *fiber.Ctx) error {
 
 func (s *FiberServer) GoogleLoginHandler(c *fiber.Ctx) error {
 	var body struct {
-		Token  string  `json:"token"`
-		Invite *string `json:"invite"`
+		Token  string `json:"token"`
+		Invite string `json:"invite"`
 	}
 
 	if err := c.BodyParser(&body); err != nil {
@@ -64,19 +63,22 @@ func (s *FiberServer) GoogleLoginHandler(c *fiber.Ctx) error {
 		return ErrResp(c, 401, "Validation Failed")
 	}
 
-	if body.Invite != nil {
-		fmt.Println(body.Invite)
-		// invite, err := db.FindInviteByToken(token)
+	user := s.db.GetOrCreateUser(database.User{
+		OAuthId:   payload.Claims["sub"].(string),
+		Name:      payload.Claims["name"].(string),
+		AvatarUrl: payload.Claims["picture"].(string),
+		Email:     payload.Claims["email"].(string),
+	})
+
+	// TODO: What if user already logged in??
+	if body.Invite != "" {
+		userId := user["id"]
+		s.db.AddEventMember(userId, body.Invite)
 	}
 
 	return c.JSON(fiber.Map{
 		"code": 200,
-		"data": s.db.GetOrCreateUser(database.User{
-			OAuthId:   payload.Claims["sub"].(string),
-			Name:      payload.Claims["name"].(string),
-			AvatarUrl: payload.Claims["picture"].(string),
-			Email:     payload.Claims["email"].(string),
-		}),
+		"data": user,
 	})
 }
 
@@ -212,27 +214,6 @@ func (s *FiberServer) DislikeEvent(c *fiber.Ctx) error {
 	})
 }
 
-func (s *FiberServer) CreateEventInvite(c *fiber.Ctx) error {
-	var body struct {
-		EventId   string `json:"event_id"`
-		CreatedBy string `json:"created_by"`
-	}
-
-	if err := c.BodyParser(&body); err != nil {
-		return ErrResp(c, 400, "Body parse error")
-	}
-	if body.CreatedBy == "" || body.EventId == "" {
-		return ErrResp(c, 400, "Required EventId and CreatedBy")
-	}
-
-	return c.JSON(fiber.Map{
-		"code": 200,
-		"data": fiber.Map{
-			"id": s.db.CreateEventInvite(body.EventId, body.CreatedBy),
-		},
-	})
-}
-
 // -- Utils
 
 func ErrResp(c *fiber.Ctx, status int, args ...string) error {
@@ -245,3 +226,50 @@ func ErrResp(c *fiber.Ctx, status int, args ...string) error {
 		"message": message,
 	})
 }
+
+// Look at better ways to Create Invite
+// var secret = []byte(os.Getenv("JWT_SECRET"))
+
+// func generateInviteToken(eventID string, createdBy string) (string, error) {
+// 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+// 		"event_id":   eventID,
+// 		"created_by": createdBy,
+// 	})
+// 	fmt.Println(token)
+// 	return token.SignedString(secret)
+// }
+
+// func parseInviteToken(tokenString string) (string, string) {
+// 	claims := jwt.MapClaims{}
+// 	token, _ := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+// 		return secret, nil
+// 	})
+// 	println(token)
+// 	return claims["event_id"].(string), claims["created_by"].(string)
+// }
+//
+// // func (s *FiberServer) CreateEventInvite(c *fiber.Ctx) error {
+// 	var body struct {
+// 		EventId   string `json:"event_id"`
+// 		CreatedBy string `json:"created_by"`
+// 	}
+
+// 	if err := c.BodyParser(&body); err != nil {
+// 		return ErrResp(c, 400, "Body parse error")
+// 	}
+// 	if body.CreatedBy == "" || body.EventId == "" {
+// 		return ErrResp(c, 400, "Required EventId and CreatedBy")
+// 	}
+
+// 	// token, err := generateInviteToken(body.EventId, body.CreatedBy)
+// 	// if err != nil {
+// 	// 	log.Fatal(err)
+// 	// }
+
+// 	return c.JSON(fiber.Map{
+// 		"code": 200,
+// 		"data": fiber.Map{
+// 			"invite": body.EventId,
+// 		},
+// 	})
+// }
