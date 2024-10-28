@@ -145,7 +145,7 @@ func (s *service) GetUserEvents(userId string) []*Event {
 	}
 	defer rows.Close()
 
-	events, err := s.scanEventRows(rows)
+	events, err := ScanEventRows(rows)
 	if err != nil {
 		log.Fatalf("GetUserEventsScan %v", err)
 	}
@@ -164,7 +164,7 @@ func (s *service) GetEvent(eventId string) (*Event, error) {
 	}
 	defer rows.Close()
 
-	events, err := s.scanEventRows(rows)
+	events, err := ScanEventRows(rows)
 	if err != nil {
 		log.Fatalf("GetEventScan %v", err)
 	}
@@ -256,68 +256,4 @@ func (s *service) Health() map[string]string {
 func (s *service) Close() error {
 	log.Printf("Disconnected from database: %s", database)
 	return s.db.Close()
-}
-
-// --- Helpers
-
-func (s *service) scanEventRows(rows *sql.Rows) (map[string]*Event, error) {
-	events := make(map[string]*Event)
-
-	for rows.Next() {
-		var id, name, owner, image string
-		var created time.Time
-		var ownerID, ownerAuthID, ownerName string
-		var ownerAvatar, ownerEmail string
-		var likeID sql.NullInt32
-		var likeUID, likeEID, likeCreated sql.NullString
-		var mbrID, mbrAuthID, mbrName string
-		var mbrAvatar, mbrEmail string
-
-		// Scan the row into appropriate variables
-		err := rows.Scan(&id, &name, &created, &owner, &image,
-			&ownerID, &ownerAuthID, &ownerName, &ownerAvatar, &ownerEmail,
-			&likeID, &likeUID, &likeEID, &likeCreated,
-			&mbrID, &mbrAuthID, &mbrName, &mbrAvatar, &mbrEmail)
-
-		if err != nil {
-			return nil, fmt.Errorf("processEventRows: %v", err)
-		}
-
-		if _, exists := events[id]; !exists {
-			events[id] = &Event{
-				ID:        id,
-				Name:      name,
-				CreatedAt: created,
-				OwnerID:   ownerID,
-				ImageURL:  image,
-				Owner: User{
-					ID:        ownerID,
-					OAuthId:   ownerAuthID,
-					Name:      ownerName,
-					AvatarUrl: ownerAvatar,
-					Email:     ownerEmail,
-				},
-				Likes: []Like{},
-			}
-		}
-
-		if likeID.Valid {
-			events[id].Likes = append(events[id].Likes, Like{
-				ID:        int(likeID.Int32),
-				UserID:    likeUID.String,
-				EventID:   likeEID.String,
-				CreatedAt: likeCreated.String,
-			})
-		}
-
-		events[id].Members = append(events[id].Members, User{
-			ID:        mbrID,
-			OAuthId:   mbrAuthID,
-			Name:      mbrName,
-			AvatarUrl: mbrAvatar,
-			Email:     mbrEmail,
-		})
-	}
-
-	return events, nil
 }
