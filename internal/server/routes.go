@@ -2,12 +2,14 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"mercuria-backend/internal/database"
 
 	"github.com/Timothylock/go-signin-with-apple/apple"
 	"github.com/gofiber/fiber/v2"
+	jwt "github.com/golang-jwt/jwt/v4"
 	"google.golang.org/api/idtoken"
 )
 
@@ -16,9 +18,10 @@ func PublicRoutes(s *FiberServer) {
 
 	route.Get("/", s.HelloWorldHandler)
 	route.Get("/health", s.HealthHandler)
-
+	route.Get("/auth/logout", s.Logout)
 	route.Post("/auth/google/login", s.GoogleLoginHandler) // oauth2, return Access & Refresh tokens
 	route.Post("/auth/apple/login", s.AppleLoginHandler)   // oauth2, return Access & Refresh tokens
+	route.Post("/auth/refresh-token", s.RefreshToken)
 }
 
 func PrivateRoutes(s *FiberServer) {
@@ -26,12 +29,10 @@ func PrivateRoutes(s *FiberServer) {
 
 	route.Get("events/:id", JWTProtected(), s.GetEvent)
 	route.Get("events/user/:id", JWTProtected(), s.GetUserEvents)
-
 	route.Post("events/create", JWTProtected(), s.CreateEvent)
 	route.Post("events/like", JWTProtected(), s.LikeEvent)
 	route.Post("events/create-invite", JWTProtected(), s.CreateEventInvite)
 	route.Post("events/verify-invite", JWTProtected(), s.VerifyEventInvite)
-
 	route.Delete("events/dislike", JWTProtected(), s.DislikeEvent)
 }
 
@@ -39,8 +40,6 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	PublicRoutes(s)
 	PrivateRoutes(s)
 }
-
-// -- Auth Handlers
 
 func (s *FiberServer) HelloWorldHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
@@ -50,6 +49,78 @@ func (s *FiberServer) HelloWorldHandler(c *fiber.Ctx) error {
 
 func (s *FiberServer) HealthHandler(c *fiber.Ctx) error {
 	return c.JSON(s.db.Health())
+}
+
+func (s *FiberServer) RefreshToken(c *fiber.Ctx) error {
+	var body struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return ErrResp(c, 400, "Body parse error")
+	}
+
+	//is expired
+	token, err := jwt.Parse(body.RefreshToken, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(os.Getenv("REFRESH_SECRET")), nil
+	})
+	if err != nil {
+		return ErrResp(c, 401, "Invalid authorization, please login again")
+	}
+	//is token valid?
+	if _, ok := token.Claims.(jwt.Claims); !ok && !token.Valid {
+		return ErrResp(c, 401, "Invalid authorization, please login again")
+	}
+	//the token claims should conform to MapClaims
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if ok && token.Valid {
+		refreshUUID, ok := claims["refresh_uuid"].(string)
+		if !ok {
+			return ErrResp(c, 401, "Invalid authorization, please login again")
+		}
+		userID, ok := claims["user_id"].(string)
+		if !ok {
+			return ErrResp(c, 401, "Invalid authorization, please login again")
+		}
+		//delete the previous Refresh Token
+		deleted, delErr := s.DeleteAuth(refreshUUID)
+		if delErr != nil || deleted == 0 { //if any goes wrong
+			return ErrResp(c, 401, "Invalid authorization, please login again")
+		}
+		//create new fresh tokens
+		ts, createErr := CreateToken(userID)
+		if createErr != nil {
+			return ErrResp(c, 403, "Invalid authorization, please login again")
+		}
+		//save the tokens metadata to redis
+		if err := s.CreateAuth(userID, ts); err != nil {
+			return ErrResp(c, 403, "Save Token Details error", err)
+		}
+		return c.JSON(fiber.Map{
+			"access_token":  ts.AccessToken,
+			"refresh_token": ts.RefreshToken,
+		})
+	} else {
+		return ErrResp(c, 401, "Invalid authorization, please login again")
+	}
+}
+
+func (s *FiberServer) Logout(c *fiber.Ctx) error {
+	au, err := ExtractTokenMetadata(c)
+	if err != nil {
+		return ErrResp(c, 400, "User not logged in")
+	}
+
+	deleted, delErr := s.DeleteAuth(au.AccessUUID)
+	if delErr != nil || deleted == 0 { //if any goes wrong
+		return ErrResp(c, 401, "Invalid request")
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Successfully logged out",
+	})
 }
 
 func (s *FiberServer) GoogleLoginHandler(c *fiber.Ctx) error {
@@ -70,26 +141,32 @@ func (s *FiberServer) GoogleLoginHandler(c *fiber.Ctx) error {
 		return ErrResp(c, 401, "Validation Failed")
 	}
 
+	// TODO: handle error and return 500
 	user := s.db.GetOrCreateUser(database.User{
 		OAuthId:   payload.Claims["sub"].(string),
 		Name:      payload.Claims["name"].(string),
 		AvatarUrl: payload.Claims["picture"].(string),
 		Email:     payload.Claims["email"].(string),
 	})
+	userId := user["id"]
 
-	tokens, err := GenerateNewTokens(user["id"])
+	// Create JWT and save to Redis
+	tokenDetails, err := CreateToken(userId)
 	if err != nil {
-		return ErrResp(c, 500, "Token generation error")
+		return ErrResp(c, 500, "Create Token error", err)
+	}
+	if err := s.CreateAuth(userId, tokenDetails); err != nil {
+		return ErrResp(c, 500, "Save Token Details error", err)
 	}
 
+	// TODO: handle error and return 500
 	if body.Invite != "" {
-		userId := user["id"]
 		s.db.AddEventMember(userId, body.Invite)
 	}
 
 	return c.JSON(fiber.Map{
-		"access_token":  tokens.Access,
-		"refresh_token": tokens.Refresh,
+		"access_token":  tokenDetails.AccessToken,
+		"refresh_token": tokenDetails.RefreshToken,
 		"user":          user,
 	})
 }
@@ -134,8 +211,6 @@ func (s *FiberServer) AppleLoginHandler(c *fiber.Ctx) error {
 		"data": claims,
 	})
 }
-
-// -- Events Handlers
 
 func (s *FiberServer) GetEvent(c *fiber.Ctx) error {
 	id := c.Params("id")
@@ -234,6 +309,7 @@ func (s *FiberServer) CreateEventInvite(c *fiber.Ctx) error {
 		return ErrResp(c, 400, "Required EventId and CreatedBy")
 	}
 
+	// Look at better ways to Create Invite
 	// token, err := generateInviteToken(body.EventId, body.CreatedBy)
 	// if err != nil {
 	// 	log.Fatal(err)
@@ -265,24 +341,3 @@ func (s *FiberServer) VerifyEventInvite(c *fiber.Ctx) error {
 		"message": s.db.AddEventMember(body.UserId, body.Invite),
 	})
 }
-
-// Look at better ways to Create Invite
-// var secret = []byte(os.Getenv("JWT_SECRET"))
-
-// func generateInviteToken(eventID string, createdBy string) (string, error) {
-// 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-// 		"event_id":   eventID,
-// 		"created_by": createdBy,
-// 	})
-// 	fmt.Println(token)
-// 	return token.SignedString(secret)
-// }
-
-// func parseInviteToken(tokenString string) (string, string) {
-// 	claims := jwt.MapClaims{}
-// 	token, _ := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-// 		return secret, nil
-// 	})
-// 	println(token)
-// 	return claims["event_id"].(string), claims["created_by"].(string)
-// }

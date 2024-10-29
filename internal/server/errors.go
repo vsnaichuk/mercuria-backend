@@ -2,13 +2,14 @@ package server
 
 import "github.com/gofiber/fiber/v2"
 
-func ErrResp(c *fiber.Ctx, status int, args ...string) error {
-	message := ""
-	if len(args) > 0 {
-		message = args[0]
+func ErrResp(c *fiber.Ctx, status int, msg string, err ...error) error {
+	details := ""
+	if len(err) > 0 {
+		details = err[0].Error()
 	}
 	return c.Status(status).JSON(fiber.Map{
 		"error":   true,
-		"message": message,
+		"message": msg,
+		"details": details,
 	})
 }

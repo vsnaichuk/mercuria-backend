@@ -11,10 +11,11 @@ import (
 // Middleware for routes group with JWT authentication.
 // See: https://github.com/gofiber/contrib/jwt
 func JWTProtected() func(*fiber.Ctx) error {
-	// Create config for JWT authentication middleware.
 	config := jwtMiddleware.Config{
-		SigningKey:   jwtMiddleware.SigningKey{Key: []byte(os.Getenv("JWT_SECRET_KEY"))},
-		ContextKey:   "jwt", // used in private routes
+		SigningKey: jwtMiddleware.SigningKey{
+			Key: []byte(os.Getenv("ACCESS_SECRET")),
+		},
+		ContextKey:   "jwt",
 		ErrorHandler: jwtError,
 	}
 

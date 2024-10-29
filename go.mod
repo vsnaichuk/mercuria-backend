@@ -10,7 +10,9 @@ require (
 
 require (
 	github.com/MicahParks/keyfunc/v2 v2.1.0 // indirect
+	github.com/go-redis/redis/v7 v7.4.1 // indirect
 	github.com/gofiber/contrib/jwt v1.0.10 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 )
 
