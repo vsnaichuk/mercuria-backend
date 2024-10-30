@@ -16,18 +16,25 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
---
--- Name: uuid-ossp; Type: EXTENSION; Schema: -; Owner: -
---
+/* Main function to generate a uuidv7 value with millisecond precision */
+/* See the UUID Version 7 specification at https://www.rfc-editor.org/rfc/rfc9562#name-uuid-version-7 */
+CREATE FUNCTION uuidv7() RETURNS uuid
+AS $$
+  -- Replace the first 48 bits of a uuidv4 with the current
+  -- number of milliseconds since 1970-01-01 UTC
+  -- and set the "ver" field to 7 by setting additional bits
+  select encode(
+    set_bit(
+      set_bit(
+        overlay(uuid_send(gen_random_uuid()) placing
+	  substring(int8send((extract(epoch from clock_timestamp())*1000)::bigint) from 3)
+	  from 1 for 6),
+	52, 1),
+      53, 1), 'hex')::uuid;
+$$ LANGUAGE sql volatile;
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
-
-
---
--- Name: EXTENSION "uuid-ossp"; Type: COMMENT; Schema: -; Owner: 
---
-
-COMMENT ON EXTENSION "uuid-ossp" IS 'generate universally unique identifiers (UUIDs)';
+COMMENT ON FUNCTION uuidv7() IS
+'Generate a uuid-v7 value with a 48-bit timestamp (millisecond precision) and 74 bits of randomness';
 
 
 --
@@ -40,11 +47,11 @@ CREATE FUNCTION public.get_or_create_user(p_oauth_id text, p_name text, p_avatar
 BEGIN
     -- Try to insert a new user, ignore the insert if the user already exists
     INSERT INTO users (id, oauth_id, name, avatar_url, email)
-    VALUES (uuid_generate_v4(), p_oauth_id, p_name, p_avatar_url, p_email)
+    VALUES (uuidv7(), p_oauth_id, p_name, p_avatar_url, p_email)
     ON CONFLICT (email) DO NOTHING;
 
     -- Retrieve the user
-    RETURN QUERY 
+    RETURN QUERY
     SELECT users.id, users.name, users.avatar_url
     FROM users
     WHERE users.email = p_email;

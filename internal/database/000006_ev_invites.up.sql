@@ -1,5 +1,5 @@
 CREATE TABLE invites (
-    id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+    id uuid DEFAULT uuidv7() PRIMARY KEY,
     event_id uuid NOT NULL,
     status VARCHAR(50) DEFAULT 'Pending' NOT NULL CHECK (status IN ('Pending', 'Accepted', 'Declined')),
     created_by uuid NOT NULL,

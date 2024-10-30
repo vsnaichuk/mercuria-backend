@@ -2,7 +2,7 @@
 
 CREATE OR REPLACE FUNCTION public.get_event(
     _id uuid)
-    RETURNS TABLE(id uuid, name text, created_at timestamp with time zone, owner uuid, image_url text) 
+    RETURNS TABLE(id uuid, name text, created_at timestamp with time zone, owner uuid, image_url text)
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
@@ -24,7 +24,7 @@ ALTER FUNCTION public.get_event(uuid) OWNER TO postgres;
 CREATE OR REPLACE FUNCTION public.create_event(
     _name text,
     _owner uuid)
-    RETURNS TABLE(id uuid) 
+    RETURNS TABLE(id uuid)
     LANGUAGE 'plpgsql'
     COST 100
     VOLATILE PARALLEL UNSAFE
@@ -34,7 +34,7 @@ AS $BODY$
 BEGIN
     RETURN QUERY
     INSERT INTO events AS e (id, name, created_at, owner, image_url)
-    VALUES (uuid_generate_v4(), _name, now(), _owner, '')
+    VALUES (uuidv7(), _name, now(), _owner, '')
     RETURNING e.id;
 END;
 $BODY$;

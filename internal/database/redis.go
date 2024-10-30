@@ -1,6 +1,7 @@
 package database
 
 import (
+	"log"
 	"os"
 
 	redis "github.com/go-redis/redis/v7"
@@ -28,5 +29,11 @@ func NewRedis(selectDB ...int) *redis.Client {
 		// 	InsecureSkipVerify: true,
 		// },
 	})
+
+	_, err := redisClient.Ping().Result()
+	if err != nil {
+		log.Fatalf("connect redis error %v", err)
+	}
+
 	return redisClient
 }

@@ -63,7 +63,7 @@ BEGIN
     )
     SELECT user_events.*, users.*, likes.*, users_mbr.*
     FROM user_events
-    
+
     INNER JOIN users ON users.id = user_events.owner
     LEFT JOIN likes ON likes.event_id = user_events.id
     INNER JOIN members ON members.event_id = user_events.id
@@ -83,7 +83,7 @@ BEGIN
     RETURN QUERY
     SELECT events.*, users.*, likes.*, users_mbr.*
     FROM events
-    
+
     INNER JOIN users ON users.id = events.owner
     LEFT JOIN likes ON likes.event_id = events.id
     INNER JOIN members ON members.event_id = events.id
@@ -97,7 +97,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION public.create_event(
     _name text,
     _owner uuid)
-    RETURNS uuid 
+    RETURNS uuid
     LANGUAGE 'plpgsql'
 
 AS $BODY$
@@ -105,7 +105,7 @@ DECLARE
     new_event_id uuid;
 BEGIN
     INSERT INTO events AS e (id, name, created_at, owner, image_url)
-    VALUES (uuid_generate_v4(), _name, now(), _owner, '')
+    VALUES (uuidv7(), _name, now(), _owner, '')
     RETURNING e.id INTO new_event_id;
 
     -- add owner to members
