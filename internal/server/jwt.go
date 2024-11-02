@@ -64,11 +64,11 @@ func (s *FiberServer) CreateAuth(userid string, td *TokenDetails) error {
 	rt := time.Unix(td.RtExpires, 0)
 	now := time.Now()
 
-	errAccess := s.redis.Set(td.AccessUUID, userid, at.Sub(now)).Err()
+	errAccess := s.redis.GetClient().Set(td.AccessUUID, userid, at.Sub(now)).Err()
 	if errAccess != nil {
 		return errAccess
 	}
-	errRefresh := s.redis.Set(td.RefreshUUID, userid, rt.Sub(now)).Err()
+	errRefresh := s.redis.GetClient().Set(td.RefreshUUID, userid, rt.Sub(now)).Err()
 	if errRefresh != nil {
 		return errRefresh
 	}
@@ -124,7 +124,7 @@ func ExtractTokenMetadata(c *fiber.Ctx) (*AccessDetails, error) {
 }
 
 func (s *FiberServer) FetchAuth(authD *AccessDetails) (string, error) {
-	userID, err := s.redis.Get(authD.AccessUUID).Result()
+	userID, err := s.redis.GetClient().Get(authD.AccessUUID).Result()
 	if err != nil {
 		return "", err
 	}
@@ -132,7 +132,7 @@ func (s *FiberServer) FetchAuth(authD *AccessDetails) (string, error) {
 }
 
 func (s *FiberServer) DeleteAuth(givenUUID string) (int64, error) {
-	deleted, err := s.redis.Del(givenUUID).Result()
+	deleted, err := s.redis.GetClient().Del(givenUUID).Result()
 	if err != nil {
 		return 0, err
 	}

@@ -2,12 +2,11 @@ package server
 
 import (
 	"mercuria-backend/internal/database"
+	"mercuria-backend/internal/redis"
 	"mercuria-backend/internal/storage"
 
-	redis "github.com/go-redis/redis/v7"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	s3 "github.com/gofiber/storage/s3/v2"
 )
 
 type FiberServer struct {
@@ -15,9 +14,9 @@ type FiberServer struct {
 
 	db database.Service
 
-	redis *redis.Client
+	redis redis.Service
 
-	storage *s3.Storage
+	storage storage.Service
 }
 
 func New() *FiberServer {
@@ -38,8 +37,8 @@ func New() *FiberServer {
 	// Init postgres database
 	DB := database.New()
 
-	// Init Redis on database 1 - it's used to store the JWT
-	Redis := database.NewRedis(1)
+	// Init Redis - it's used to store the JWT
+	Redis := redis.New()
 
 	// Init S3 bucket to store images
 	Storage := storage.New()

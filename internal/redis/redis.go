@@ -1,23 +1,36 @@
-package database
+package redis
 
 import (
 	"log"
 	"os"
 
-	redis "github.com/go-redis/redis/v7"
+	"github.com/go-redis/redis/v7"
 )
+
+type Service interface {
+	GetClient() *redis.Client
+}
+
+type service struct {
+	redis *redis.Client
+}
 
 var (
 	redisHost     = os.Getenv("REDIS_HOST")
 	redisPassword = os.Getenv("REDIS_PASSWORD")
-	redisClient   *redis.Client
+	redisInstance *service
 )
 
-func NewRedis(selectDB ...int) *redis.Client {
-	redisClient = redis.NewClient(&redis.Options{
+func New() Service {
+	// Reuse Connection
+	if redisInstance != nil {
+		return redisInstance
+	}
+
+	redisClient := redis.NewClient(&redis.Options{
 		Addr:     redisHost,
 		Password: redisPassword,
-		DB:       selectDB[0],
+		DB:       0,
 		// DialTimeout:        10 * time.Second,
 		// ReadTimeout:        30 * time.Second,
 		// WriteTimeout:       30 * time.Second,
@@ -35,5 +48,13 @@ func NewRedis(selectDB ...int) *redis.Client {
 		log.Fatalf("connect redis error %v", err)
 	}
 
-	return redisClient
+	redisInstance = &service{
+		redis: redisClient,
+	}
+
+	return redisInstance
+}
+
+func (s *service) GetClient() *redis.Client {
+	return s.redis
 }
