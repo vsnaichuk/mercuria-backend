@@ -11,9 +11,19 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/joho/godotenv/autoload"
 )
+
+type Photo struct {
+	Id        uuid.UUID `json:"id"`
+	PublicUrl string    `json:"public_url"`
+	FileName  string    `json:"file_name"`
+	FileType  string    `json:"file_type"`
+	CreatedBy string    `json:"created_by"`
+	EventId   string    `json:"event_id"`
+}
 
 type InviteStatus string
 
@@ -58,8 +68,10 @@ type User struct {
 	Email     string `json:"email"`
 }
 
+// TODO(fix): make all methods return (*Type, error) and inside handler return 500
 // Service represents a service that interacts with a database.
 type Service interface {
+	CreatePhoto(photo *Photo) error
 	AddEventMember(userId string, eventId string) string
 	LikeEvent(userId string, eventId string) string
 	DislikeEvent(userId string, eventId string) string
@@ -101,10 +113,25 @@ func New() Service {
 	return dbInstance
 }
 
+func (s *service) CreatePhoto(photo *Photo) error {
+	_, err := s.db.Query("INSERT INTO photos (id, public_url, created_by, file_name, file_type, event_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+		photo.Id,
+		photo.PublicUrl,
+		photo.CreatedBy,
+		photo.FileName,
+		photo.FileType,
+		photo.EventId,
+	)
+	if err != nil {
+		return fmt.Errorf("[CreatePhoto] %v", err)
+	}
+	return nil
+}
+
 func (s *service) AddEventMember(userId string, eventId string) string {
 	_, err := s.db.Query("INSERT INTO members (user_id, event_id) VALUES ($1, $2)", userId, eventId)
 	if err != nil {
-		log.Fatalf("AddEventMemberQuery %v", err)
+		log.Fatalf("[AddEventMember] %v", err)
 	}
 	return "success"
 }
@@ -117,7 +144,7 @@ func (s *service) AddEventMember(userId string, eventId string) string {
 // 	).Scan(&id)
 
 // 	if err != nil {
-// 		log.Fatalf("CreateEventInviteQuery %v", err)
+// 		log.Fatalf("[CreateEventInvite] %v", err)
 // 	}
 // 	return id
 // }
@@ -125,7 +152,7 @@ func (s *service) AddEventMember(userId string, eventId string) string {
 func (s *service) LikeEvent(userId string, eventId string) string {
 	_, err := s.db.Query("INSERT INTO likes (user_id, event_id) VALUES ($1, $2)", userId, eventId)
 	if err != nil {
-		log.Fatalf("LikeEventQuery %v", err)
+		log.Fatalf("[LikeEvent] %v", err)
 	}
 	return "success"
 }
@@ -133,7 +160,7 @@ func (s *service) LikeEvent(userId string, eventId string) string {
 func (s *service) DislikeEvent(userId string, eventId string) string {
 	_, err := s.db.Query("DELETE FROM likes WHERE user_id = $1 AND event_id = $2;", userId, eventId)
 	if err != nil {
-		log.Fatalf("DislikeEventQuery %v", err)
+		log.Fatalf("[DislikeEvent] %v", err)
 	}
 	return "success"
 }
@@ -141,13 +168,13 @@ func (s *service) DislikeEvent(userId string, eventId string) string {
 func (s *service) GetUserEvents(userId string) []*Event {
 	rows, err := s.db.Query("SELECT * FROM public.get_events($1)", userId)
 	if err != nil {
-		log.Fatalf("GetUserEvents %v", err)
+		log.Fatalf("[GetUserEvents] %v", err)
 	}
 	defer rows.Close()
 
 	events, err := ScanEventRows(rows)
 	if err != nil {
-		log.Fatalf("GetUserEventsScan %v", err)
+		log.Fatalf("[GetUserEventsScan] %v", err)
 	}
 
 	slice := slices.Collect(maps.Values(events))
@@ -160,13 +187,13 @@ func (s *service) GetUserEvents(userId string) []*Event {
 func (s *service) GetEvent(eventId string) (*Event, error) {
 	rows, err := s.db.Query("SELECT * FROM public.get_event($1)", eventId)
 	if err != nil {
-		log.Fatalf("GetEventQuery %v", err)
+		log.Fatalf("[GetEvent] %v", err)
 	}
 	defer rows.Close()
 
 	events, err := ScanEventRows(rows)
 	if err != nil {
-		log.Fatalf("GetEventScan %v", err)
+		log.Fatalf("[GetEventScan] %v", err)
 	}
 
 	if event, exists := events[eventId]; exists {
@@ -183,11 +210,12 @@ func (s *service) CreateEvent(einfo Event) string {
 	).Scan(&id)
 
 	if err != nil {
-		log.Fatalf("CreateEventQuery  %v", err)
+		log.Fatalf("[CreateEvent] %v", err)
 	}
 	return id
 }
 
+// TODO: Refactor, check CreatePhoto
 func (s *service) GetOrCreateUser(uinfo User) map[string]string {
 	var id, name, avatarUrl string
 	err := s.db.QueryRow(
@@ -199,7 +227,7 @@ func (s *service) GetOrCreateUser(uinfo User) map[string]string {
 	).Scan(&id, &name, &avatarUrl)
 
 	if err != nil {
-		log.Fatalf("GetOrCreateUserQuery  %v", err)
+		log.Fatalf("[GetOrCreateUser] %v", err)
 	}
 
 	data := make(map[string]string)

@@ -106,6 +106,23 @@ CREATE TABLE members (
 );
 
 --
+-- Name: photos; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE photos (
+    id uuid PRIMARY KEY,
+		public_url text NOT NULL,
+		file_name text NOT NULL,
+		file_type text NOT NULL,
+		created_by uuid NOT NULL,
+		event_id uuid NOT NULL,
+		created_at timestamp with time zone DEFAULT "now"() NOT NULL,
+		CONSTRAINT photos_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+		CONSTRAINT photos_event_id_fkey FOREIGN KEY (event_id) REFERENCES events(id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+
+--
 -- Name: invites; Type: TABLE; Schema: public; Owner: postgres
 --
 

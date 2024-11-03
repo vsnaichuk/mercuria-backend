@@ -34,6 +34,7 @@ require (
 	github.com/aws/smithy-go v1.22.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/satori/go.uuid v1.2.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 )
 

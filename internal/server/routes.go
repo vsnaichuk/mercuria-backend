@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"mercuria-backend/internal/database"
@@ -33,6 +34,7 @@ func PrivateRoutes(s *FiberServer) {
 	route.Post("events/like", JWTProtected(), s.LikeEvent)
 	route.Post("events/create-invite", JWTProtected(), s.CreateEventInvite)
 	route.Post("events/verify-invite", JWTProtected(), s.VerifyEventInvite)
+	route.Post("events/upload-photos", JWTProtected(), s.UploadPhotos)
 	route.Delete("events/dislike", JWTProtected(), s.DislikeEvent)
 }
 
@@ -133,7 +135,7 @@ func (s *FiberServer) GoogleLoginHandler(c *fiber.Ctx) error {
 		return ErrResp(c, 400, "Body parse error")
 	}
 	if body.IdToken == "" {
-		return ErrResp(c, 400, "Token is required")
+		return ErrResp(c, 400, "`id_token` is required")
 	}
 
 	payload, err := idtoken.Validate(context.Background(), body.IdToken, "")
@@ -181,7 +183,7 @@ func (s *FiberServer) AppleLoginHandler(c *fiber.Ctx) error {
 		return ErrResp(c, 400, "Body parse error")
 	}
 	if body.IdToken == "" {
-		return ErrResp(c, 400, "Token is required")
+		return ErrResp(c, 400, "`id_token` is required")
 	}
 
 	key := os.Getenv("APPLE_KEY")
@@ -270,7 +272,7 @@ func (s *FiberServer) LikeEvent(c *fiber.Ctx) error {
 		return ErrResp(c, 400, "Body parse error")
 	}
 	if body.UserId == "" || body.EventId == "" {
-		return ErrResp(c, 400, "Required UserId and EventId")
+		return ErrResp(c, 400, "Required `user_id` and `event_id`")
 	}
 
 	return c.JSON(fiber.Map{
@@ -288,7 +290,7 @@ func (s *FiberServer) DislikeEvent(c *fiber.Ctx) error {
 		return ErrResp(c, 400, "Body parse error")
 	}
 	if body.UserId == "" || body.EventId == "" {
-		return ErrResp(c, 400, "Required UserId and EventId")
+		return ErrResp(c, 400, "Required `user_id` and `event_id`")
 	}
 
 	return c.JSON(fiber.Map{
@@ -306,7 +308,7 @@ func (s *FiberServer) CreateEventInvite(c *fiber.Ctx) error {
 		return ErrResp(c, 400, "Body parse error")
 	}
 	if body.CreatedBy == "" || body.EventId == "" {
-		return ErrResp(c, 400, "Required EventId and CreatedBy")
+		return ErrResp(c, 400, "Required `event_id` and `created_by`")
 	}
 
 	// Look at better ways to Create Invite
@@ -332,12 +334,70 @@ func (s *FiberServer) VerifyEventInvite(c *fiber.Ctx) error {
 		return ErrResp(c, 400, "Body parse error")
 	}
 	if body.UserId == "" || body.Invite == "" {
-		return ErrResp(c, 400, "Required UserId and Invite")
+		return ErrResp(c, 400, "Required `user_id` and `invite`")
 	}
 
 	// TODO: Add better verification process
 
 	return c.JSON(fiber.Map{
 		"message": s.db.AddEventMember(body.UserId, body.Invite),
+	})
+}
+
+func (s *FiberServer) UploadPhotos(c *fiber.Ctx) error {
+	form, err := c.MultipartForm()
+	if err != nil {
+		return ErrResp(c, 400, "Form data parse error")
+	}
+
+	createdByValues, creatorOk := form.Value["created_by"]
+	eventIdValues, eventOk := form.Value["event_id"]
+	if !creatorOk || !eventOk {
+		return ErrResp(c, 400, "Required `created_by` and `event_id`")
+	}
+
+	files := form.File["photos"]
+	for i, file := range files {
+		createdBy := createdByValues[i]
+		eventId := eventIdValues[i]
+		if createdBy == "" || eventId == "" {
+			return ErrResp(c, 400, "Required `created_by` and `event_id`")
+		}
+
+		fmt.Println(file.Filename, file.Size, file.Header["Content-Type"])
+		// => "photo.jpeg" 10641 "image/jpeg"
+
+		src, err := file.Open()
+		if err != nil {
+			return ErrResp(c, 500, "Open file error", err)
+		}
+		defer src.Close()
+
+		fileBytes, _ := io.ReadAll(src)
+		fileName := file.Filename
+		fileType := file.Header.Get("Content-Type")
+
+		photo := &database.Photo{
+			Id:        UUID(),
+			CreatedBy: createdBy,
+			FileName:  fileName,
+			FileType:  fileType,
+			EventId:   eventId,
+		}
+
+		output, err := s.storage.UploadFile(fileBytes, photo.Id, fileType)
+		if err != nil {
+			return ErrResp(c, 500, "Upload file to storage error", err)
+		}
+
+		photo.PublicUrl = output.Location
+
+		if err := s.db.CreatePhoto(photo); err != nil {
+			return ErrResp(c, 500, err.Error())
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "success",
 	})
 }

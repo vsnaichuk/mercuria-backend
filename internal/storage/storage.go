@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
@@ -29,6 +30,7 @@ var (
 	region          = os.Getenv("S3_REGION")
 	accessKeyId     = os.Getenv("S3_ACCESS_KEY_ID")
 	accessKey       = os.Getenv("S3_SECRET_ACCESS_KEY")
+	session         = os.Getenv("S3_SESSION")
 	storageInstance *service
 )
 
@@ -38,7 +40,16 @@ func New() Service {
 		return storageInstance
 	}
 
-	cfg, err := config.LoadDefaultConfig(context.TODO())
+	staticProvider := credentials.NewStaticCredentialsProvider(
+		accessKeyId,
+		accessKey,
+		session,
+	)
+	cfg, err := config.LoadDefaultConfig(
+		context.TODO(),
+		config.WithRegion(region),
+		config.WithCredentialsProvider(staticProvider),
+	)
 	if err != nil {
 		log.Fatalf("load s3 config error %v", err)
 	}
