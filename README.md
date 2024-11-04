@@ -1,6 +1,6 @@
 # Project codename "Mercuria". Golang Backend
 
-Classic disposable camera experience, allowing people to capture shared moments effortlessly across all types of events—from weddings to concerts and parties.
+WIP: This section is under development. Additional details and setup instructions will be provided soon.
 
 ## Getting Started
 
