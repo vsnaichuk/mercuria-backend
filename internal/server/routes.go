@@ -365,7 +365,7 @@ func (s *FiberServer) UploadPhotos(c *fiber.Ctx) error {
 		}
 
 		fmt.Println(file.Filename, file.Size, file.Header["Content-Type"])
-		// => "photo.jpeg" 10641 "image/jpeg"
+		// => "photo.jpeg" 160037 "image/jpeg"
 
 		src, err := file.Open()
 		if err != nil {
@@ -378,14 +378,14 @@ func (s *FiberServer) UploadPhotos(c *fiber.Ctx) error {
 		fileType := file.Header.Get("Content-Type")
 
 		photo := &database.Photo{
-			Id:        UUID(),
+			ID:        UUID().String(),
 			CreatedBy: createdBy,
 			FileName:  fileName,
 			FileType:  fileType,
-			EventId:   eventId,
+			EventID:   eventId,
 		}
 
-		output, err := s.storage.UploadFile(fileBytes, photo.Id, fileType)
+		output, err := s.storage.UploadFile(fileBytes, photo.ID, fileType)
 		if err != nil {
 			return ErrResp(c, 500, "Upload file to storage error", err)
 		}

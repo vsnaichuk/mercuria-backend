@@ -11,18 +11,17 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/joho/godotenv/autoload"
 )
 
 type Photo struct {
-	Id        uuid.UUID `json:"id"`
-	PublicUrl string    `json:"public_url"`
-	FileName  string    `json:"file_name"`
-	FileType  string    `json:"file_type"`
-	CreatedBy string    `json:"created_by"`
-	EventId   string    `json:"event_id"`
+	ID        string `json:"id"`
+	PublicUrl string `json:"public_url"`
+	FileName  string `json:"file_name"`
+	FileType  string `json:"file_type"`
+	CreatedBy string `json:"created_by"`
+	EventID   string `json:"event_id"`
 }
 
 type InviteStatus string
@@ -51,6 +50,7 @@ type Event struct {
 	Owner     User      `json:"owner"`
 	Likes     []Like    `json:"likes"`
 	Members   []User    `json:"members"`
+	Photos    []Photo   `json:"photos"`
 }
 
 type Like struct {
@@ -115,12 +115,12 @@ func New() Service {
 
 func (s *service) CreatePhoto(photo *Photo) error {
 	_, err := s.db.Query("INSERT INTO photos (id, public_url, created_by, file_name, file_type, event_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-		photo.Id,
+		photo.ID,
 		photo.PublicUrl,
 		photo.CreatedBy,
 		photo.FileName,
 		photo.FileType,
-		photo.EventId,
+		photo.EventID,
 	)
 	if err != nil {
 		return fmt.Errorf("[CreatePhoto] %v", err)

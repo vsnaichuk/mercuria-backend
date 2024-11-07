@@ -11,13 +11,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/google/uuid"
 )
 
 type Service interface {
 	GetClient() *s3.Client
 	GetUploader() *manager.Uploader
-	UploadFile(fileData []byte, fileId uuid.UUID, fileType string) (*manager.UploadOutput, error)
+	UploadFile(fileData []byte, fileId string, fileType string) (*manager.UploadOutput, error)
 }
 
 type service struct {
@@ -71,11 +70,12 @@ func (s *service) GetUploader() *manager.Uploader {
 	return s.uploader
 }
 
-func (s *service) UploadFile(fileData []byte, fileId uuid.UUID, fileType string) (*manager.UploadOutput, error) {
+func (s *service) UploadFile(fileData []byte, fileId string, fileType string) (*manager.UploadOutput, error) {
 	return s.uploader.Upload(context.TODO(), &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
-		Key:         aws.String(fileId.String()),
+		Key:         aws.String(fileId),
 		Body:        bytes.NewReader(fileData),
 		ContentType: aws.String(fileType),
+		ACL:         "public-read",
 	})
 }

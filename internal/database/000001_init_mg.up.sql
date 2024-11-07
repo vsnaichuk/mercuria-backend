@@ -154,6 +154,13 @@ CREATE TYPE event_type AS (
     like_user_id uuid,
     like_event_id uuid,
     like_created_at timestamp with time zone,
+    photo_id uuid,
+		photo_public_url text,
+		photo_file_name text,
+		photo_file_type text,
+		photo_created_by uuid,
+		photo_event_id uuid,
+		photo_created_at timestamp with time zone,
     member_id uuid,
     member_oauth_id text,
     member_name text,
@@ -170,11 +177,12 @@ CREATE OR REPLACE FUNCTION get_event(
 AS $BODY$
 BEGIN
     RETURN QUERY
-    SELECT events.*, users.*, likes.*, users_mbr.*
+    SELECT events.*, users.*, likes.*, photos.*, users_mbr.*
     FROM events
 
     INNER JOIN users ON users.id = events.owner
     LEFT JOIN likes ON likes.event_id = events.id
+    LEFT JOIN photos ON photos.event_id = events.id
     INNER JOIN members ON members.event_id = events.id
     INNER JOIN users AS users_mbr ON users_mbr.id = members.user_id
     WHERE events.id = _id;
@@ -219,11 +227,12 @@ BEGIN
         JOIN members ON members.event_id = events.id
         WHERE members.user_id = _user_id
     )
-    SELECT user_events.*, users.*, likes.*, users_mbr.*
+    SELECT user_events.*, users.*, likes.*, photos.*, users_mbr.*
     FROM user_events
 
     INNER JOIN users ON users.id = user_events.owner
     LEFT JOIN likes ON likes.event_id = user_events.id
+    LEFT JOIN photos ON photos.event_id = user_events.id
     INNER JOIN members ON members.event_id = user_events.id
     INNER JOIN users AS users_mbr ON users_mbr.id = members.user_id;
 END;
